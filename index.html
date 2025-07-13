@@ -20,7 +20,7 @@
 </head>
 <body>
     <h1>Rich Snippet Scanner MVP</h1>
-    <p>Enter URLs (one per line) or a sitemap URL to scan and validate with Google's Rich Results Test. Now handles sitemap indexes!</p>
+    <p>Enter URLs (one per line) or a sitemap URL to scan and validate with Google's Rich Results Test. Now handles deeper sitemap indexes!</p>
     
     <label for="sitemap">Sitemap URL (optional):</label>
     <input type="text" id="sitemap" placeholder="https://example.com/sitemap.xml">
@@ -57,7 +57,7 @@
             }
             if (sitemapUrl) {
                 try {
-                    urlList = await fetchSitemaps(sitemapUrl, 1); // Depth limit: 1
+                    urlList = await fetchSitemaps(sitemapUrl, 3); // Increased depth limit to 3 for nested indexes
                     status.textContent += `Parsed ${urlList.length} page URLs from sitemap (including sub-sitemaps if indexed).`;
                 } catch (error) {
                     status.textContent += `Error processing sitemap: ${error.message}. Falling back to manual URLs. If CORS issue, enable the proxy checkbox and try again after activating the proxy site.`;
