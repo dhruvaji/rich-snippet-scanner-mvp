@@ -15,6 +15,7 @@
         #results a { display: block; margin: 5px 0; color: #1a73e8; }
         #status { font-style: italic; color: #666; }
         .loading { display: none; text-align: center; margin: 10px 0; }
+        .checkbox-label { display: inline-block; font-weight: normal; margin-left: 5px; }
     </style>
 </head>
 <body>
@@ -23,6 +24,9 @@
     
     <label for="sitemap">Sitemap URL (optional):</label>
     <input type="text" id="sitemap" placeholder="https://example.com/sitemap.xml">
+    
+    <input type="checkbox" id="use-proxy">
+    <label for="use-proxy" class="checkbox-label">Use CORS Proxy (for cross-domain fetch issues; visit <a href="https://cors-anywhere.herokuapp.com/" target="_blank">cors-anywhere</a> first to activate)</label>
     
     <label for="urls">Website URLs (one per line):</label>
     <textarea id="urls" rows="10" placeholder="https://example.com/page1\nhttps://example.com/page2"></textarea>
@@ -45,13 +49,18 @@
             let urlList = [];
             
             // Handle sitemap if provided
-            const sitemapUrl = document.getElementById('sitemap').value.trim();
+            let sitemapUrl = document.getElementById('sitemap').value.trim();
+            const useProxy = document.getElementById('use-proxy').checked;
+            if (useProxy && sitemapUrl) {
+                sitemapUrl = 'https://cors-anywhere.herokuapp.com/' + sitemapUrl;
+                status.textContent += 'Using CORS proxy for fetch... ';
+            }
             if (sitemapUrl) {
                 try {
                     urlList = await fetchSitemaps(sitemapUrl, 1); // Depth limit: 1
-                    status.textContent = `Parsed ${urlList.length} page URLs from sitemap (including sub-sitemaps if indexed).`;
+                    status.textContent += `Parsed ${urlList.length} page URLs from sitemap (including sub-sitemaps if indexed).`;
                 } catch (error) {
-                    status.textContent = `Error processing sitemap: ${error.message}. Falling back to manual URLs. If CORS issue, try a proxy like https://cors-anywhere.herokuapp.com/ prefixed to the URL (e.g., https://cors-anywhere.herokuapp.com/https://example.com/sitemap.xml).`;
+                    status.textContent += `Error processing sitemap: ${error.message}. Falling back to manual URLs. If CORS issue, enable the proxy checkbox and try again after activating the proxy site.`;
                 }
             }
             
@@ -63,7 +72,7 @@
                 status.textContent += ' Limited to 100 URLs for performance.';
             }
             if (urlList.length === 0) {
-                status.textContent = 'No valid URLs provided.';
+                status.textContent += '\nNo valid URLs provided.';
                 loading.style.display = 'none';
                 return;
             }
@@ -91,8 +100,8 @@
         async function fetchSitemaps(url, depth) {
             if (depth <= 0) throw new Error('Sitemap depth limit reached.');
             
-            const response = await fetch(url); // For CORS issues, prefix with 'https://cors-anywhere.herokuapp.com/' in testing
-            if (!response.ok) throw new Error('Failed to fetch sitemap');
+            const response = await fetch(url);
+            if (!response.ok) throw new Error(`Failed to fetch sitemap (status: ${response.status})`);
             const xmlText = await response.text();
             const parser = new DOMParser();
             const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
@@ -105,7 +114,10 @@
                 // It's an index: Recurse into each sub-sitemap
                 const subPromises = [];
                 for (let sitemap of sitemaps) {
-                    const loc = sitemap.getElementsByTagName('loc')[0]?.textContent?.trim();
+                    let loc = sitemap.getElementsByTagName('loc')[0]?.textContent?.trim();
+                    if (loc && document.getElementById('use-proxy').checked) {
+                        loc = 'https://cors-anywhere.herokuapp.com/' + loc;
+                    }
                     if (loc) {
                         subPromises.push(fetchSitemaps(loc, depth - 1));
                     }
