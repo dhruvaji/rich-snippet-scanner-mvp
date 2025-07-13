@@ -19,7 +19,7 @@
 </head>
 <body>
     <h1>Rich Snippet Scanner MVP</h1>
-    <p>Enter URLs (one per line) or a sitemap URL to scan and validate with Google's Rich Results Test.</p>
+    <p>Enter URLs (one per line) or a sitemap URL to scan and validate with Google's Rich Results Test. Now handles sitemap indexes!</p>
     
     <label for="sitemap">Sitemap URL (optional):</label>
     <input type="text" id="sitemap" placeholder="https://example.com/sitemap.xml">
@@ -48,27 +48,19 @@
             const sitemapUrl = document.getElementById('sitemap').value.trim();
             if (sitemapUrl) {
                 try {
-                    const response = await fetch(sitemapUrl);
-                    if (!response.ok) throw new Error('Failed to fetch sitemap');
-                    const xmlText = await response.text();
-                    const parser = new DOMParser();
-                    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
-                    const locs = xmlDoc.getElementsByTagName('loc');
-                    for (let loc of locs) {
-                        urlList.push(loc.textContent.trim());
-                    }
-                    status.textContent = `Parsed ${urlList.length} URLs from sitemap.`;
+                    urlList = await fetchSitemaps(sitemapUrl, 1); // Depth limit: 1
+                    status.textContent = `Parsed ${urlList.length} page URLs from sitemap (including sub-sitemaps if indexed).`;
                 } catch (error) {
-                    status.textContent = `Error fetching sitemap: ${error.message}. Falling back to manual URLs.`;
+                    status.textContent = `Error processing sitemap: ${error.message}. Falling back to manual URLs. If CORS issue, try a proxy like https://cors-anywhere.herokuapp.com/ prefixed to the URL (e.g., https://cors-anywhere.herokuapp.com/https://example.com/sitemap.xml).`;
                 }
             }
             
             // Add manual URLs
             const manualUrls = document.getElementById('urls').value.trim().split('\n').map(u => u.trim()).filter(u => u);
             urlList = [...new Set([...urlList, ...manualUrls])]; // Dedupe
-            if (urlList.length > 50) {
-                urlList = urlList.slice(0, 50);
-                status.textContent += ' Limited to 50 URLs for performance.';
+            if (urlList.length > 100) {
+                urlList = urlList.slice(0, 100);
+                status.textContent += ' Limited to 100 URLs for performance.';
             }
             if (urlList.length === 0) {
                 status.textContent = 'No valid URLs provided.';
@@ -94,6 +86,42 @@
 
             loading.style.display = 'none';
             if (!status.textContent) status.textContent = `Opened ${urlList.length} validation tabs. Check pop-up blocker if none appear.`;
+        }
+
+        async function fetchSitemaps(url, depth) {
+            if (depth <= 0) throw new Error('Sitemap depth limit reached.');
+            
+            const response = await fetch(url); // For CORS issues, prefix with 'https://cors-anywhere.herokuapp.com/' in testing
+            if (!response.ok) throw new Error('Failed to fetch sitemap');
+            const xmlText = await response.text();
+            const parser = new DOMParser();
+            const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+            
+            let urls = [];
+            
+            // Check if it's a sitemap index (has <sitemap> tags)
+            const sitemaps = xmlDoc.getElementsByTagName('sitemap');
+            if (sitemaps.length > 0) {
+                // It's an index: Recurse into each sub-sitemap
+                const subPromises = [];
+                for (let sitemap of sitemaps) {
+                    const loc = sitemap.getElementsByTagName('loc')[0]?.textContent?.trim();
+                    if (loc) {
+                        subPromises.push(fetchSitemaps(loc, depth - 1));
+                    }
+                }
+                const subUrlsArrays = await Promise.all(subPromises);
+                urls = subUrlsArrays.flat();
+            } else {
+                // It's a regular sitemap: Extract <url><loc>
+                const locs = xmlDoc.getElementsByTagName('loc');
+                for (let loc of locs) {
+                    const pageUrl = loc.textContent?.trim();
+                    if (pageUrl) urls.push(pageUrl);
+                }
+            }
+            
+            return urls;
         }
     </script>
 </body>
