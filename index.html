@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rich Snippet Scanner MVP</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; background: #f4f7fa; color: #333; }
+        h1 { color: #1a73e8; }
+        label { display: block; margin: 10px 0 5px; font-weight: bold; }
+        textarea, input[type="text"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { background: #1a73e8; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; margin-top: 10px; }
+        button:hover { background: #0d5bd9; }
+        #results { margin-top: 20px; padding: 10px; background: white; border: 1px solid #ddd; border-radius: 4px; }
+        #results a { display: block; margin: 5px 0; color: #1a73e8; }
+        #status { font-style: italic; color: #666; }
+        .loading { display: none; text-align: center; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>Rich Snippet Scanner MVP</h1>
+    <p>Enter URLs (one per line) or a sitemap URL to scan and validate with Google's Rich Results Test.</p>
+    
+    <label for="sitemap">Sitemap URL (optional):</label>
+    <input type="text" id="sitemap" placeholder="https://example.com/sitemap.xml">
+    
+    <label for="urls">Website URLs (one per line):</label>
+    <textarea id="urls" rows="10" placeholder="https://example.com/page1\nhttps://example.com/page2"></textarea>
+    
+    <button onclick="scanUrls()">Scan and Validate</button>
+    
+    <div class="loading" id="loading">Loading... <span>(Fetching sitemap if provided)</span></div>
+    <div id="status"></div>
+    <div id="results"></div>
+
+    <script>
+        async function scanUrls() {
+            const status = document.getElementById('status');
+            const loading = document.getElementById('loading');
+            const results = document.getElementById('results');
+            results.innerHTML = '';
+            status.textContent = '';
+            loading.style.display = 'block';
+
+            let urlList = [];
+            
+            // Handle sitemap if provided
+            const sitemapUrl = document.getElementById('sitemap').value.trim();
+            if (sitemapUrl) {
+                try {
+                    const response = await fetch(sitemapUrl);
+                    if (!response.ok) throw new Error('Failed to fetch sitemap');
+                    const xmlText = await response.text();
+                    const parser = new DOMParser();
+                    const xmlDoc = parser.parseFromString(xmlText, 'text/xml');
+                    const locs = xmlDoc.getElementsByTagName('loc');
+                    for (let loc of locs) {
+                        urlList.push(loc.textContent.trim());
+                    }
+                    status.textContent = `Parsed ${urlList.length} URLs from sitemap.`;
+                } catch (error) {
+                    status.textContent = `Error fetching sitemap: ${error.message}. Falling back to manual URLs.`;
+                }
+            }
+            
+            // Add manual URLs
+            const manualUrls = document.getElementById('urls').value.trim().split('\n').map(u => u.trim()).filter(u => u);
+            urlList = [...new Set([...urlList, ...manualUrls])]; // Dedupe
+            if (urlList.length > 50) {
+                urlList = urlList.slice(0, 50);
+                status.textContent += ' Limited to 50 URLs for performance.';
+            }
+            if (urlList.length === 0) {
+                status.textContent = 'No valid URLs provided.';
+                loading.style.display = 'none';
+                return;
+            }
+
+            // Generate and open tabs/links
+            urlList.forEach(url => {
+                if (!url.startsWith('http')) {
+                    status.textContent += `\nInvalid URL skipped: ${url}`;
+                    return;
+                }
+                const testUrl = `https://search.google.com/test/rich-results?url=${encodeURIComponent(url)}`;
+                window.open(testUrl, '_blank'); // Open in new tab
+                // Fallback link in results
+                const link = document.createElement('a');
+                link.href = testUrl;
+                link.textContent = `Validate ${url}`;
+                link.target = '_blank';
+                results.appendChild(link);
+            });
+
+            loading.style.display = 'none';
+            if (!status.textContent) status.textContent = `Opened ${urlList.length} validation tabs. Check pop-up blocker if none appear.`;
+        }
+    </script>
+</body>
+</html>
